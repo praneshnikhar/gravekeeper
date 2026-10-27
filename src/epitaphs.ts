@@ -62,12 +62,14 @@ async function writeBatch(
   const contents =
     `Repository: ${repoName}. ${batch.length} of the fallen follow.\n\n` +
     JSON.stringify(batch.map(shrink), null, 1);
-  const res = await ai.models.generateContent({
+  const interaction = await ai.interactions.create({
     model: GK_MODEL,
-    contents,
-    config: { systemInstruction: SYSTEM, temperature: 0.9 },
+    system_instruction: SYSTEM,
+    generation_config: { temperature: 0.9 },
+    input: contents,
   });
-  const arr = extractJsonArray(res.text ?? "");
+  const text = interaction.output_text ?? "";
+  const arr = extractJsonArray(text);
   return arr
     .filter((e): e is Record<string, unknown> => typeof e === "object" && e !== null)
     .map((e) => ({

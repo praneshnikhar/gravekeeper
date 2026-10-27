@@ -1,7 +1,7 @@
 import "dotenv/config";
 
 /** Model used to write epitaphs. Override with GK_MODEL. */
-export const GK_MODEL = process.env.GK_MODEL || "gemini-2.5-flash";
+export const GK_MODEL = process.env.GK_MODEL || "gemini-3.8-flash";
 
 /** gothic | melancholic | wry */
 export const GK_TONE = process.env.GK_TONE || "gothic";
