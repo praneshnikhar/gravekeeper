@@ -62,13 +62,29 @@ async function writeBatch(
   const contents =
     `Repository: ${repoName}. ${batch.length} of the fallen follow.\n\n` +
     JSON.stringify(batch.map(shrink), null, 1);
-  const interaction = await ai.interactions.create({
-    model: GK_MODEL,
-    system_instruction: SYSTEM,
-    generation_config: { temperature: 0.9 },
-    input: contents,
-  });
-  const text = interaction.output_text ?? "";
+  // Streaming transport: under launch-week overload the service parks
+  // non-streaming requests indefinitely; a stream surfaces status errors
+  // (503 high demand etc.) immediately so the retry loop below can react.
+  // timeout_ms: a request that never answers must still fail, not hang forever.
+  const stream = await ai.interactions.create(
+    {
+      model: GK_MODEL,
+      stream: true,
+      system_instruction: SYSTEM,
+      generation_config: { temperature: 0.9 },
+      input: contents,
+    },
+    { timeout_ms: 90_000 }
+  );
+  let text = "";
+  for await (const event of stream) {
+    if (event.event_type === "step.delta") {
+      const delta = event.delta as { type?: unknown; text?: unknown } | undefined;
+      if (delta && delta.type === "text" && typeof delta.text === "string") {
+        text += delta.text;
+      }
+    }
+  }
   const arr = extractJsonArray(text);
   return arr
     .filter((e): e is Record<string, unknown> => typeof e === "object" && e !== null)
@@ -97,16 +113,16 @@ export async function writeEpitaphs(census: Census): Promise<Graveyard> {
     process.stdout.write(
       `   … entering the crypt for ${Math.min(i + GK_BATCH, census.deceased.length)}/${census.deceased.length}\r`
     );
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 4; attempt++) {
       try {
         epitaphs.push(...(await writeBatch(ai, batch, census.repoName)));
         break;
       } catch (err) {
-        if (attempt === 3) {
+        if (attempt === 4) {
           failures += batch.length;
-          console.log(`\n   ! batch failed three times, moving on: ${String(err).slice(0, 120)}`);
+          console.log(`\n   ! batch failed four times, moving on: ${String(err).slice(0, 120)}`);
         } else {
-          await new Promise((r) => setTimeout(r, 2500 * attempt));
+          await new Promise((r) => setTimeout(r, 3000 * attempt));
         }
       }
     }
